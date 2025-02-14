@@ -5,24 +5,25 @@ from datetime import datetime, timedelta
 import io
 import numpy as np
 
-def process_excel(file, start_date_str, end_date_str, constant_value):
+def process_excel(file, start_date_str, end_date_str, constant_value, date_format_excel, date_format_input):
     df = pd.read_excel(file)
     
     date_col = df.columns[0]
     df.rename(columns={date_col: "Date Time"}, inplace=True)
     
     try:
-        df["Date Time"] = pd.to_datetime(df["Date Time"], format="%m/%d/%Y %H:%M:%S")
+        # Convert the first column using the chosen date format (including time)
+        df["Date Time"] = pd.to_datetime(df["Date Time"], format=date_format_excel)
     except Exception as e:
-        raise ValueError(f"Error converting dates in Excel file. Please check that the date column is in the format 'mm/dd/yyyy HH:MM:SS'. Detail: {e}")
+        raise ValueError(f"Error converting dates in Excel file. Please check that the date column is in the correct format. Detail: {e}")
     
     try:
         start_date_str = start_date_str.strip()
         end_date_str = end_date_str.strip()
-        start_date = datetime.strptime(start_date_str, "%m/%d/%Y")
-        end_date = datetime.strptime(end_date_str, "%m/%d/%Y")
+        start_date = datetime.strptime(start_date_str, date_format_input)
+        end_date = datetime.strptime(end_date_str, date_format_input)
     except ValueError:
-        raise ValueError("Invalid start/end date format. Please ensure you use the format mm/dd/yyyy exactly. Example: 08/21/2023")
+        raise ValueError(f"Invalid start/end date format. Please ensure you use the format {date_format_input.lower()} exactly. Example: {'08/21/2023' if date_format_input=='%m/%d/%Y' else '21/08/2023'}")
     
     filtered_df = df[(df["Date Time"].dt.date >= start_date.date()) & (df["Date Time"].dt.date <= end_date.date())].copy()
     
@@ -83,7 +84,6 @@ def select_tide_chain(df, gap_hours=6, tolerance_hours=2):
         main_low = get_extreme_in_window(df, main_high["Date Time"], direction="forward", tide_type="low",
                                          gap_hours=gap_hours, tolerance_hours=tolerance_hours)
     
-    
     L1 = main_low
     H2 = None
     L3 = None
@@ -141,16 +141,28 @@ def main():
     if uploaded_file is not None:
         st.write("File uploaded successfully!")
         
-        start_date_input = st.text_input("Enter the start date (mm/dd/yyyy):")
-        end_date_input = st.text_input("Enter the end date (mm/dd/yyyy):")
+        # Ask the user which date format to use:
+        date_format_choice = st.radio("Select the date format for input and Excel file:", 
+                                      options=["mm/dd/yyyy", "dd/mm/yyyy"])
+        
+        if date_format_choice == "mm/dd/yyyy":
+            date_format_input = "%m/%d/%Y"
+            date_format_excel = "%m/%d/%Y %H:%M:%S"
+        else:
+            date_format_input = "%d/%m/%Y"
+            date_format_excel = "%d/%m/%Y %H:%M:%S"
+        
+        start_date_input = st.text_input(f"Enter the start date ({date_format_choice}):")
+        end_date_input = st.text_input(f"Enter the end date ({date_format_choice}):")
         constant_value = st.number_input("Enter the constant value:", value=0.0, format="%.2f")
         
         if st.button("Process File"):
             if not start_date_input or not end_date_input:
-                st.error("Please enter both start and end dates in the format mm/dd/yyyy.")
+                st.error("Please enter both start and end dates.")
             else:
                 try:
-                    processed_df = process_excel(uploaded_file, start_date_input, end_date_input, constant_value)
+                    processed_df = process_excel(uploaded_file, start_date_input, end_date_input,
+                                                 constant_value, date_format_excel, date_format_input)
                     st.success("File processed successfully!")
                     
                     st.subheader("Processed Excel Data")
