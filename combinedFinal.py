@@ -8,6 +8,7 @@ import numpy as np
 def process_excel(file, start_date_str, end_date_str, constant_value, date_format_excel, date_format_input):
     df = pd.read_excel(file)
     
+    # Rename the first column to "Date Time"
     date_col = df.columns[0]
     df.rename(columns={date_col: "Date Time"}, inplace=True)
     
@@ -32,6 +33,24 @@ def process_excel(file, start_date_str, end_date_str, constant_value, date_forma
         filtered_df["Modified value"] = constant_value - filtered_df[third_col]
     except Exception as e:
         raise ValueError(f"Error processing the third column. Please ensure the Excel file has a valid third column. Detail: {e}")
+    
+    # --- New Code for "Smoothed Tide" Column ---
+    # We assume that the D column (the fourth column in the Excel file) is used for smoothing.
+    if filtered_df.shape[1] >= 4:
+        # Get the values from the D column (fourth column). 
+        # Note: Because we renamed the first column, the D column is still at index 3.
+        col_d = filtered_df.iloc[:, 3]
+        col_d_array = col_d.to_numpy()
+        # Compute the forward-looking average over a window of 4 rows.
+        # For each row i, average the values from i to i+3 (if available); otherwise, set NaN.
+        smoothed = np.array([
+            np.mean(col_d_array[i:i+4]) if i+4 <= len(col_d_array) else np.nan 
+            for i in range(len(col_d_array))
+        ])
+        filtered_df["Smoothed Tide"] = smoothed
+    else:
+        filtered_df["Smoothed Tide"] = np.nan
+    # --- End New Code ---
     
     filtered_df.sort_values(by="Date Time", inplace=True)
     filtered_df.reset_index(drop=True, inplace=True)
